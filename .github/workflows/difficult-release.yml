@@ -1,0 +1,78 @@
+# Difficult releases have some possibility of breaking things for users or developers
+# They should only occur at times advertised in advance,
+# and nothing else should be committed during that time.
+
+name: Check difficult release window
+
+on: pull_request
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check release window
+        shell: bash
+        env:
+          release_issue: "https://github.com/sleepdiary/core/issues/1"
+          release_ends_before: "2021-08-10T06:00:00Z"
+          release_starts_after: "2021-08-10T16:00:00Z"
+        run: |
+          echo "$GITHUB_REF" | grep --quiet '^refs/heads/difficult-release-'"
+          IS_DIFFICULT_RELEASE="$?"
+
+          TIME_BEG="$( date +%s -d "$release_starts_after" )"
+          TIME_END="$( date +%s -d "$release_ends_before" )"
+          TIME_NOW="$( date +%s )"
+          test "$TIME_BEG" -lt "$TIME_NOW" -a "$TIME_END" -gt "$TIME_NOW"
+          WITHIN_DIFFICULT_WINDOW="$?"
+
+          if [ "$WITHIN_DIFFICULT_WINDOW" -eq 0 ]
+          then
+
+            # outside the time window of a difficult release
+            if [ "$IS_DIFFICULT_RELEASE" -eq 0 ]
+            then
+              cat <<EOF
+          Trying to push difficult release branch "$GITHUB_REF" at the wrong time.
+          Difficult release window begins after: $RELEASE_STARTS_AFTER
+          Difficult release window ends before: $RELEASE_ENDS_BEFORE
+
+          Please do one of the following:
+
+          a) wait until the release window begins
+          b) edit this worklfow and update the "RELEASE_STARTS_AFTER" and "RELEASE_ENDS_BEFORE" variables
+          c) rename this branch not to begin with "difficult-release-"
+
+          For more information, see $release_issue
+          EOF
+              exit 2
+            else
+              exit 0
+            fi
+
+          else
+
+            # within the time window of a difficult release
+
+            if [ "$IS_DIFFICULT_RELEASE" -eq 0 ]
+            then
+              exit 0
+            else
+              cat <<EOF
+          Trying to push normal branch "$GITHUB_REF" at the wrong time.
+
+          We are currently in the middle of a difficult release.
+          Difficult release window ends before: $RELEASE_ENDS_BEFORE
+
+          Please do one of the following:
+
+          a) wait until the release window ends
+          b) edit this worklfow and update the "RELEASE_STARTS_AFTER" and "RELEASE_ENDS_BEFORE" variables
+          c) rename this branch to begin with "difficult-release-"
+
+          For more information, see $release_issue
+          EOF
+              exit 2
+            fi
+
+          fi

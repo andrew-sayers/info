@@ -1,0 +1,18 @@
+name: Check release window
+
+on: pull_request
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    name: Separate release and non-release PRs
+    steps:
+      - id: check
+        uses: andrew-sayers/release-window-checker@v1.0.1
+        with:
+          release-prefix: release-
+          release-begins-after: "2021-08-10T06:00:00Z"
+          release-ends-before: "2021-08-10T16:00:00Z"
+          release-issue: "https://github.com/sleepdiary/core/issues/1"
+      - name: Print result
+        run: echo "${{ steps.hello.outputs.message }}"

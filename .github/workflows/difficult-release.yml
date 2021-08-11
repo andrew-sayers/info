@@ -1,17 +1,20 @@
-name: Check release window
+name: Planned maintenance
 
 on: pull_request
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    name: Separate release and non-release PRs
+    name: Is this branch allowed at this time?
     steps:
-      - name: Check release window
+      - name: Get maintenance window
+        id: settings
+        uses: andrew-sayers/planned-maintenance-setter@main
+      - name: Is now a good time?
         id: check
-        uses: andrew-sayers/release-window-checker@v1.0.0
+        uses: andrew-sayers/planned-maintenance@v1.0.0
         with:
-          release-regexp: ^release-
-          release-window-start: "2021-08-10T06:00:00Z"
-          release-window-end: "2021-08-10T16:00:00Z"
-          release-issue: "https://github.com/sleepdiary/core/issues/1"
+          branch-regexp: ${{ steps.settings.outputs.branch-regexp }}
+          maintenance-window-start: ${{ steps.settings.outputs.maintenance-window-start }}
+          maintenance-window-end: ${{ steps.settings.outputs.maintenance-window-end }}
+          maintenance-url: ${{ steps.settings.outputs.maintenance-url }}

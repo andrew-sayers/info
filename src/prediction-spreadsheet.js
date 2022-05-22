@@ -49,16 +49,22 @@ add_export("prediction_spreadsheet",function( workbook, statistics ) {
           one_day           = 24*ONE_HOUR,
           worksheet         = workbook.addWorksheet("Estimates"),
           settings = [
-              0,
-              0,
-              [ undefined, "Starting wake time", new Date( awake_at ) ],
-              [ undefined, "Day length", day_length / one_day ],
-              [ undefined, "Uncertainty", estimate_interval / one_day ],
+              [ "Average over this many days", statistics.schedule.sleep.timestamps.length-1 ],
+              [ "Base uncertainty", estimate_interval / one_day ],
+              [ "Daily uncertainty multiplier", 1.1 ],
+              [ "Last recorded sleep", { formula: "=MAX(A:A)" } ],
+              [ "Start of sleep-averaging period", { formula: "=VLOOKUP(J6-J3,A:A,1)" } ],
+              [ "Average time between sleeps", { formula: "=(J6-J7)/J3" } ],
+              [ "Last recorded wake", { formula: "=MAX(B:B)" } ],
+              [ "Start of wake-averaging period", { formula: "=VLOOKUP(J9-J3,B:B,1)" } ],
+              [ "Average time between wakes", { formula: "=(J9-J10)/J3" } ],
+              [ "Average day length", { formula: "=(J8+J11)/2" } ],
           ],
+          day_format = "ddd\\ MMM\\ D,\\ HH:MM",
           sleep_column = {
               width: 18,
               style: {
-                  numFmt: "ddd\\ MMM\\ D,\\ HH:MM",
+                  numFmt: day_format,
                   font: {
                       name: 'Calibri',
                       color: { argb: "FFFFFFFF" }
@@ -73,7 +79,7 @@ add_export("prediction_spreadsheet",function( workbook, statistics ) {
           wake_column = {
               width: 18,
               style: {
-                  numFmt: "ddd\\ MMM\\ D,\\ HH:MM",
+                  numFmt: day_format,
                   font: {
                       name: 'Calibri',
                       color: { argb: "FF000000" }
@@ -84,65 +90,112 @@ add_export("prediction_spreadsheet",function( workbook, statistics ) {
                       fgColor: {argb:"FFFFFFA0"},
                   },
               }
-          }
+          },
+
+          sleep_prediction_column = {
+              width: 18,
+              style: {
+                  numFmt: day_format,
+                  font: {
+                      name: 'Calibri',
+                      color: { argb: "FFFFFFFF" }
+                  },
+                  fill: {
+                      type: "pattern",
+                      pattern: "solid",
+                      fgColor: {argb:"FF000080"},
+                  },
+              }
+          },
+          wake_prediction_column = {
+              width: 18,
+              style: {
+                  numFmt: day_format,
+                  font: {
+                      name: 'Calibri',
+                      color: { argb: "FF000000" }
+                  },
+                  fill: {
+                      type: "pattern",
+                      pattern: "solid",
+                      fgColor: {argb:"FFFFFFC0"},
+                  },
+              }
+          },
+
+          heading_style = {
+              font: {
+                  name: 'Calibri',
+                  bold: true,
+              },
+              fill: {
+                  type: "pattern",
+                  pattern: "solid",
+                  fgColor: {argb:"FFEEEEEE"},
+              },
+              alignment: {
+                  vertical: "middle",
+                  horizontal: "center"
+              },
+          },
+          rows = [
+              ["Observed times",undefined,undefined,"Estimated sleep time",undefined,"Estimated wake time",undefined,undefined,"Algorithm"],
+              ["Asleep at","Awake at",undefined,"Earliest","Latest","Earliest","Latest",undefined,"Setting","Value"]
+          ].concat(
+              statistics.schedule.sleep.timestamps.map( (v,n) => [
+                  new Date(v),
+                  new Date(statistics.schedule.wake.timestamps[n]),
+                  undefined
+              ])
+          ),
+          max_rows = rows.length+Math.min( 14, statistics.schedule.sleep.timestamps.length-1 );
     ;
 
-    worksheet.columns = [
-        sleep_column, sleep_column,
-        wake_column,  wake_column,
-        {},
-        { width: 18, style: { numFmt: "ddd\\ MMM\\ D,\\ HH:MM" } },
-        { width: 18, style: { numFmt: "ddd\\ MMM\\ D,\\ HH:MM" } },
-    ];
-
-    worksheet.addRows(
-        [
-            ["Estimated sleep time",undefined,"Estimated wake time"],
-            ["Earliest","Latest","Earliest","Latest",undefined,"Setting","Value"]
-        ]
-    );
-    worksheet.addRow([
-        { formula: "G3+$G$5-G6", result: new Date( asleep_at - estimate_interval + day_length ) },
-        { formula: "G3+$G$5+G6", result: new Date( asleep_at + estimate_interval + day_length ) },
-        { formula: "G4+$G$5-G6", result: new Date( awake_at   - estimate_interval + day_length ) },
-        { formula: "G4+$G$5+G6", result: new Date( awake_at   + estimate_interval + day_length ) },
-        undefined,
-        "Starting sleep time",
-        new Date( asleep_at ),
-    ]).commit();
-
-    worksheet.mergeCells("A1:B1");
-    worksheet.mergeCells("C1:D1");
-    [ "A1", "C1", "A2", "B2", "C2", "D2", "F2", "G2" ].forEach(
-        cell => worksheet.getCell(cell).style = {
-            font: {
-                name: 'Calibri',
-                bold: true,
-            },
-            fill: {
-                type: "pattern",
-                pattern: "solid",
-                fgColor: {argb:"FFEEEEEE"},
-            },
-            alignment: {
-                vertical: "middle",
-                horizontal: "center"
-            },
-        }
-    );
-
-    for ( let n=2; n!=18; ++n ) {
-        worksheet.addRow([
-            { formula: "A"+(1+n)+"+$G$5", result: new Date( asleep_at - estimate_interval + day_length*n ) },
-            { formula: "B"+(1+n)+"+$G$5", result: new Date( asleep_at + estimate_interval + day_length*n ) },
-            { formula: "C"+(1+n)+"+$G$5", result: new Date( awake_at   - estimate_interval + day_length*n ) },
-            { formula: "D"+(1+n)+"+$G$5", result: new Date( awake_at   + estimate_interval + day_length*n ) },
-        ].concat(settings[n])).commit();
+    for ( let n=2; n<max_rows; ++n ) {
+        const row = rows[n] = rows[n] || [undefined,undefined,undefined];
+        row[3] = { formula: "=IF(A"+(n+1)+",A"+(n+1)+",D"+n+"+$J$12-$J$4*$J$5)" };
+        row[4] = { formula: "=IF(A"+(n+1)+",A"+(n+1)+",E"+n+"+$J$12+$J$4*$J$5)" };
+        row[5] = { formula: "=IF(B"+(n+1)+",B"+(n+1)+",F"+n+"+$J$12-$J$4*$J$5)" };
+        row[6] = { formula: "=IF(B"+(n+1)+",B"+(n+1)+",G"+n+"+$J$12+$J$4*$J$5)" };
     }
 
-    worksheet.getCell("G3").style = sleep_column.style;
-    worksheet.getCell("G4").style =  wake_column.style;
-    ["G5","G6"].forEach( cell => worksheet.getCell( cell ).style = { numFmt: "[HH]:MM" } );
+    // add settings:
+    settings.forEach( (v,n) => {
+        rows[n+2][8] = v[0];
+        rows[n+2][9] = v[1];
+    });
+
+    // set column styles:
+    worksheet.columns = [
+        sleep_column,
+        wake_column,
+        {},
+        sleep_prediction_column, sleep_prediction_column,
+        wake_prediction_column,  wake_prediction_column,
+        {},
+        { width: 18, style: { numFmt: day_format } },
+        { width: 18, style: { numFmt: day_format } },
+    ];
+
+    worksheet.addRows(rows);
+
+    // set heading styles:
+    worksheet.mergeCells("A1:B1");
+    worksheet.mergeCells("D1:E1");
+    worksheet.mergeCells("F1:G1");
+    worksheet.mergeCells("I1:J1");
+    [ 'A', 'B', 'D', 'E', 'F', 'G', 'I', 'J' ].forEach(
+        column => [ 1, 2 ].forEach(
+            row => worksheet.getCell( column + row ).style = heading_style
+        )
+    );
+
+    // set setting formats:
+    worksheet.getCell( 'J3' ).style = { numFmt: "0" };
+    worksheet.getCell( 'J5' ).style = { numFmt: "0.00" };
+    [6,7].forEach( cell => worksheet.getCell( 'J'+cell ).style = sleep_column.style );
+    [9,10].forEach( cell => worksheet.getCell( 'J'+cell ).style =  wake_column.style );
+    [4,8,11,12].forEach( cell => worksheet.getCell( 'J'+cell ).style = { numFmt: "[HH]:MM" } );
 
     return workbook;
 
